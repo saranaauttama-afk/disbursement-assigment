@@ -10,38 +10,38 @@ const STATUS_CONFIG: Record<
 > = {
   DRAFT: {
     label: 'ร่าง',
-    dotClass: 'bg-gray-400',
-    badgeClass: 'bg-gray-100 text-gray-700 ring-1 ring-gray-200',
+    dotClass: 'bg-slate-400',
+    badgeClass: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200',
   },
   PENDING_MANAGER_APPROVAL: {
     label: 'รออนุมัติหัวหน้า',
-    dotClass: 'bg-yellow-400',
-    badgeClass: 'bg-yellow-50 text-yellow-800 ring-1 ring-yellow-200',
+    dotClass: 'bg-amber-400',
+    badgeClass: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
   },
   PENDING_FINANCE_APPROVAL: {
     label: 'รออนุมัติการเงิน',
-    dotClass: 'bg-yellow-400',
-    badgeClass: 'bg-yellow-50 text-yellow-800 ring-1 ring-yellow-200',
+    dotClass: 'bg-amber-400',
+    badgeClass: 'bg-amber-50 text-amber-700 ring-1 ring-amber-200',
   },
   APPROVED: {
     label: 'อนุมัติแล้ว',
-    dotClass: 'bg-green-400',
-    badgeClass: 'bg-green-50 text-green-800 ring-1 ring-green-200',
+    dotClass: 'bg-emerald-400',
+    badgeClass: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
   },
   REJECTED: {
     label: 'ปฏิเสธ',
-    dotClass: 'bg-red-400',
-    badgeClass: 'bg-red-50 text-red-700 ring-1 ring-red-200',
+    dotClass: 'bg-rose-400',
+    badgeClass: 'bg-rose-50 text-rose-700 ring-1 ring-rose-200',
   },
   PAID: {
     label: 'จ่ายแล้ว',
-    dotClass: 'bg-blue-400',
-    badgeClass: 'bg-blue-50 text-blue-800 ring-1 ring-blue-200',
+    dotClass: 'bg-indigo-400',
+    badgeClass: 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200',
   },
   CANCELLED: {
     label: 'ยกเลิก',
-    dotClass: 'bg-slate-400',
-    badgeClass: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200',
+    dotClass: 'bg-gray-400',
+    badgeClass: 'bg-gray-100 text-gray-500 ring-1 ring-gray-200',
   },
 }
 

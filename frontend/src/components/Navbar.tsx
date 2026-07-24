@@ -46,7 +46,7 @@ export default function Navbar() {
     location.pathname === path || location.pathname.startsWith(path + '/')
 
   return (
-    <nav className="sticky top-0 z-40 bg-white border-b border-gray-200 shadow-sm">
+    <nav className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-gray-200/50 shadow-sm">
       <div className="max-w-7xl mx-auto px-4 sm:px-6">
         <div className="flex items-center justify-between h-16">
           {/* Left: Logo + Nav Links */}
@@ -55,7 +55,7 @@ export default function Navbar() {
               to="/"
               className="flex items-center gap-2.5 mr-6 group"
             >
-              <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center shadow-sm group-hover:bg-blue-700 transition-colors duration-200">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-600 to-violet-600 flex items-center justify-center shadow-sm shadow-indigo-500/30 group-hover:shadow-indigo-500/50 transition-shadow duration-200">
                 <svg
                   className="w-4.5 h-4.5 text-white"
                   style={{ width: '18px', height: '18px' }}
@@ -71,7 +71,7 @@ export default function Navbar() {
                   />
                 </svg>
               </div>
-              <span className="text-base font-bold text-gray-900">ระบบเบิกจ่าย</span>
+              <span className="text-base font-bold gradient-text">ระบบเบิกจ่าย</span>
             </Link>
 
             {isAdmin && (
@@ -80,8 +80,8 @@ export default function Navbar() {
                   to="/admin/users"
                   className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     isActive('/admin/users')
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'
                   }`}
                 >
                   จัดการผู้ใช้
@@ -90,8 +90,8 @@ export default function Navbar() {
                   to="/admin/config"
                   className={`px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
                     isActive('/admin/config')
-                      ? 'bg-blue-50 text-blue-700'
-                      : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900'
+                      ? 'bg-indigo-50 text-indigo-700'
+                      : 'text-slate-600 hover:bg-gray-100 hover:text-slate-900'
                   }`}
                 >
                   ตั้งค่า
@@ -106,21 +106,21 @@ export default function Navbar() {
             {user && (
               <div className="hidden sm:flex items-center gap-3">
                 <div className="flex flex-col items-end">
-                  <span className="text-sm font-semibold text-gray-800 leading-tight">
+                  <span className="text-sm font-semibold text-slate-800 leading-tight">
                     {user.name}
                   </span>
                   <div className="flex gap-1 mt-0.5">
                     {user.roles.map(role => (
                       <span
                         key={role}
-                        className="inline-block text-xs font-medium text-blue-600 bg-blue-50 rounded-full px-2 py-0.5"
+                        className="inline-block text-xs font-medium text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5"
                       >
                         {role}
                       </span>
                     ))}
                   </div>
                 </div>
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white text-sm font-bold shadow-sm flex-shrink-0">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white text-sm font-bold shadow-sm shadow-indigo-500/30 flex-shrink-0">
                   {getInitials(user.name)}
                 </div>
               </div>
@@ -130,7 +130,7 @@ export default function Navbar() {
             <div className="relative">
               <button
                 onClick={() => setOpen((prev) => !prev)}
-                className="relative p-2 rounded-xl text-gray-500 hover:bg-gray-100 focus:outline-none transition-all duration-200"
+                className="relative p-2 rounded-xl text-slate-500 hover:bg-gray-100 focus:outline-none transition-all duration-200"
                 aria-label="การแจ้งเตือน"
               >
                 <svg
@@ -148,7 +148,7 @@ export default function Navbar() {
                   />
                 </svg>
                 {unreadCount > 0 && (
-                  <span className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-4 h-4 text-xs font-bold text-white bg-red-500 rounded-full animate-pulse">
+                  <span className="absolute top-1.5 right-1.5 inline-flex items-center justify-center w-4 h-4 text-xs font-bold text-white bg-gradient-to-r from-rose-500 to-pink-500 rounded-full animate-pulse">
                     {unreadCount > 9 ? '9+' : unreadCount}
                   </span>
                 )}
@@ -161,11 +161,11 @@ export default function Navbar() {
                     className="fixed inset-0 z-40"
                     onClick={() => setOpen(false)}
                   />
-                  <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200 rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
+                  <div className="absolute right-0 mt-2 w-80 bg-white border border-gray-200/60 rounded-xl shadow-xl z-50 max-h-96 overflow-y-auto">
                     <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-                      <p className="text-sm font-semibold text-gray-800">การแจ้งเตือน</p>
+                      <p className="text-sm font-semibold text-slate-800">การแจ้งเตือน</p>
                       {unreadCount > 0 && (
-                        <span className="text-xs font-medium text-blue-600 bg-blue-50 rounded-full px-2 py-0.5">
+                        <span className="text-xs font-medium text-indigo-600 bg-indigo-50 rounded-full px-2 py-0.5">
                           {unreadCount} ใหม่
                         </span>
                       )}
@@ -183,7 +183,7 @@ export default function Navbar() {
                           <li
                             key={n.id}
                             className={`px-4 py-3 border-b border-gray-50 last:border-0 cursor-pointer hover:bg-gray-50 transition-colors duration-150 ${
-                              n.is_read ? 'opacity-60' : 'bg-blue-50/60'
+                              n.is_read ? 'opacity-60' : 'bg-indigo-50/60'
                             }`}
                             onClick={() => {
                               if (!n.is_read) {
@@ -192,9 +192,9 @@ export default function Navbar() {
                             }}
                           >
                             {!n.is_read && (
-                              <span className="inline-block w-2 h-2 rounded-full bg-blue-500 mb-1" />
+                              <span className="inline-block w-2 h-2 rounded-full bg-indigo-500 mb-1" />
                             )}
-                            <p className="text-sm text-gray-800 leading-snug">{n.message}</p>
+                            <p className="text-sm text-slate-800 leading-snug">{n.message}</p>
                             <p className="text-xs text-gray-400 mt-1">
                               {new Date(n.created_at).toLocaleString('th-TH')}
                             </p>
@@ -210,7 +210,7 @@ export default function Navbar() {
             {/* Logout Button */}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-1.5 text-sm text-gray-600 hover:text-red-600 transition-colors duration-200 px-3 py-2 rounded-xl hover:bg-red-50"
+              className="flex items-center gap-1.5 text-sm text-slate-500 hover:text-rose-600 transition-colors duration-200 px-3 py-2 rounded-xl hover:bg-red-50"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15M12 9l-3 3m0 0l3 3m-3-3h12.75" />
