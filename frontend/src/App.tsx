@@ -18,7 +18,7 @@ function App() {
           <ProtectedRoute>
             <div className="min-h-screen bg-gray-50">
               <Navbar />
-              <main>
+              <main className="min-h-[calc(100vh-4rem)]">
                 <Routes>
                   <Route path="/" element={<RequestListPage />} />
                   <Route path="/requests/new" element={<CreateRequestPage />} />
