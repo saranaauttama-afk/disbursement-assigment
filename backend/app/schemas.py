@@ -3,7 +3,7 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, field_validator
 
-from .models import Category, RequestStatus
+from .models import Category, EventType, RequestStatus
 
 
 # --- Line Item ---
@@ -48,6 +48,19 @@ class LineItemOut(BaseModel):
     subtotal: Decimal
 
 
+# --- Request Event ---
+
+class RequestEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    request_id: str
+    actor_id: str
+    event_type: EventType
+    comment: str | None
+    created_at: datetime
+
+
 # --- Disbursement Request ---
 
 class RequestCreate(BaseModel):
@@ -73,3 +86,23 @@ class RequestOut(BaseModel):
     updated_at: datetime
     submitted_at: datetime | None
     line_items: list[LineItemOut] = []
+    events: list[RequestEventOut] = []
+
+
+# --- Workflow action bodies ---
+
+class RejectBody(BaseModel):
+    comment: str
+
+
+# --- Notification ---
+
+class NotificationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    user_id: str
+    request_id: str
+    message: str
+    is_read: bool
+    created_at: datetime
