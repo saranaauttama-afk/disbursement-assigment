@@ -13,6 +13,7 @@ import {
   type RequestStatus,
 } from '../api/requests'
 import StatusBadge from '../components/StatusBadge'
+import { useAuth } from '../auth/AuthContext'
 
 const CATEGORIES = ['TRAVEL', 'EQUIPMENT', 'ENTERTAINMENT', 'MISC'] as const
 
@@ -41,6 +42,7 @@ export default function RequestDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { user } = useAuth()
   const [form, setForm] = useState<LineItemForm>(emptyForm)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectComment, setRejectComment] = useState('')
@@ -131,10 +133,22 @@ export default function RequestDetailPage() {
   }
 
   const isDraft = request.status === 'DRAFT'
-  const isPending =
-    request.status === 'PENDING_MANAGER_APPROVAL' ||
-    request.status === 'PENDING_FINANCE_APPROVAL'
+  const isPendingManager = request.status === 'PENDING_MANAGER_APPROVAL'
+  const isPendingFinance = request.status === 'PENDING_FINANCE_APPROVAL'
   const isApproved = request.status === 'APPROVED'
+
+  const isRequester = user?.roles.includes('REQUESTER') ?? false
+  const isManager = user?.roles.includes('MANAGER') ?? false
+  const isFinance = user?.roles.includes('FINANCE') ?? false
+  const isOwnRequest = user?.id === request.requester_id
+
+  // Role-based visibility
+  const canSubmitCancel = isDraft && isRequester && isOwnRequest
+  const canManagerApproveReject = isPendingManager && isManager
+  const canFinanceApproveReject = isPendingFinance && isFinance
+  const canPay = isApproved && isFinance
+
+  const showApproveReject = canManagerApproveReject || canFinanceApproveReject
 
   const anyPending =
     submitMutation.isPending ||
@@ -170,7 +184,7 @@ export default function RequestDetailPage() {
 
       {/* Action Buttons */}
       <div className="flex flex-wrap gap-3">
-        {isDraft && (
+        {canSubmitCancel && (
           <>
             <button
               onClick={() => submitMutation.mutate()}
@@ -189,7 +203,7 @@ export default function RequestDetailPage() {
           </>
         )}
 
-        {isPending && (
+        {showApproveReject && (
           <>
             <button
               onClick={() => approveMutation.mutate()}
@@ -208,7 +222,7 @@ export default function RequestDetailPage() {
           </>
         )}
 
-        {isApproved && (
+        {canPay && (
           <button
             onClick={() => payMutation.mutate()}
             disabled={anyPending}

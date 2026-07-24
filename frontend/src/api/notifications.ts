@@ -1,3 +1,5 @@
+import { authHeaders } from './requests'
+
 const BASE = '/api'
 
 export interface Notification {
@@ -9,7 +11,7 @@ export interface Notification {
 }
 
 export const getNotifications = (): Promise<Notification[]> =>
-  fetch(`${BASE}/notifications`).then((r) => r.json())
+  fetch(`${BASE}/notifications`, { headers: authHeaders() }).then((r) => r.json())
 
 export const markRead = (id: string) =>
-  fetch(`${BASE}/notifications/${id}/read`, { method: 'PATCH' }).then((r) => r.json())
+  fetch(`${BASE}/notifications/${id}/read`, { method: 'PATCH', headers: authHeaders() }).then((r) => r.json())

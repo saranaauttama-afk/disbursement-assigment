@@ -1,14 +1,43 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { getRequests } from '../api/requests'
+import { getRequests, authHeaders } from '../api/requests'
 import StatusBadge from '../components/StatusBadge'
+import { useAuth } from '../auth/AuthContext'
 
 export default function RequestListPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { data: requests = [], isLoading, isError } = useQuery({
     queryKey: ['requests'],
     queryFn: getRequests,
   })
+
+  const [fromDate, setFromDate] = useState('')
+  const [toDate, setToDate] = useState('')
+  const [exporting, setExporting] = useState(false)
+
+  const isRequester = user?.roles.includes('REQUESTER') ?? false
+  const isFinance = user?.roles.includes('FINANCE') ?? false
+
+  const exportCsv = async () => {
+    setExporting(true)
+    try {
+      const res = await fetch(
+        `/api/requests/export/csv?from_date=${fromDate}&to_date=${toDate}`,
+        { headers: authHeaders() },
+      )
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'requests.csv'
+      a.click()
+      URL.revokeObjectURL(url)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -30,18 +59,53 @@ export default function RequestListPage() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold text-gray-900">รายการเบิกจ่าย</h1>
-        <Link
-          to="/requests/new"
-          className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
-        >
-          + สร้างคำขอใหม่
-        </Link>
+        {isRequester && (
+          <Link
+            to="/requests/new"
+            className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            + สร้างคำขอใหม่
+          </Link>
+        )}
       </div>
+
+      {isFinance && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 mb-6">
+          <h2 className="text-sm font-semibold text-gray-700 mb-3">Export CSV</h2>
+          <div className="flex flex-wrap items-end gap-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">ตั้งแต่วันที่</label>
+              <input
+                type="date"
+                value={fromDate}
+                onChange={e => setFromDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">ถึงวันที่</label>
+              <input
+                type="date"
+                value={toDate}
+                onChange={e => setToDate(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <button
+              onClick={exportCsv}
+              disabled={exporting || !fromDate || !toDate}
+              className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors"
+            >
+              {exporting ? 'กำลัง Export...' : 'Export CSV'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {requests.length === 0 ? (
         <div className="text-center py-16 text-gray-500">
           <p className="text-lg">ยังไม่มีคำขอเบิกจ่าย</p>
-          <p className="text-sm mt-1">คลิก "สร้างคำขอใหม่" เพื่อเริ่มต้น</p>
+          {isRequester && <p className="text-sm mt-1">คลิก "สร้างคำขอใหม่" เพื่อเริ่มต้น</p>}
         </div>
       ) : (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
