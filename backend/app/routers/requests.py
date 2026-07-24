@@ -1,7 +1,10 @@
+import csv
+import io
 from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -26,10 +29,10 @@ from ..schemas import (
     RequestOut,
     RequestUpdate,
 )
+from ..auth import get_current_user
 
 router = APIRouter(prefix="/requests", tags=["requests"])
 
-STUB_USER_ID = "00000000-0000-0000-0000-000000000001"
 _DEFAULT_THRESHOLD = Decimal("10000")
 
 
@@ -69,12 +72,13 @@ def _get_threshold(db: Session) -> Decimal:
 def _create_event(
     db: Session,
     request_id: str,
+    actor_id: str,
     event_type: EventType,
     comment: str | None = None,
 ) -> RequestEvent:
     event = RequestEvent(
         request_id=request_id,
-        actor_id=STUB_USER_ID,
+        actor_id=actor_id,
         event_type=event_type,
         comment=comment,
     )
@@ -101,9 +105,13 @@ def _finance_user_ids(db: Session) -> list[str]:
 # --- Request CRUD endpoints ---
 
 @router.post("", response_model=RequestOut, status_code=status.HTTP_201_CREATED)
-def create_request(body: RequestCreate, db: Session = Depends(get_db)):
+def create_request(
+    body: RequestCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = DisbursementRequest(
-        requester_id=STUB_USER_ID,
+        requester_id=current_user.id,
         title=body.title,
         note=body.note,
         status=RequestStatus.DRAFT,
@@ -116,17 +124,98 @@ def create_request(body: RequestCreate, db: Session = Depends(get_db)):
 
 
 @router.get("", response_model=list[RequestOut])
-def list_requests(db: Session = Depends(get_db)):
-    return db.query(DisbursementRequest).order_by(DisbursementRequest.created_at.desc()).all()
+def list_requests(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    roles = [r.role.value for r in current_user.roles]
+    q = db.query(DisbursementRequest)
+    if "ADMIN" in roles or "FINANCE" in roles:
+        pass  # see all
+    elif "MANAGER" in roles:
+        managed = db.query(User).filter(User.manager_id == current_user.id).all()
+        managed_ids = [u.id for u in managed]
+        q = q.filter(
+            (DisbursementRequest.requester_id == current_user.id)
+            | (DisbursementRequest.requester_id.in_(managed_ids))
+        )
+    else:
+        q = q.filter(DisbursementRequest.requester_id == current_user.id)
+    return q.order_by(DisbursementRequest.created_at.desc()).all()
+
+
+# CSV export must be declared BEFORE /{request_id} routes to avoid routing conflicts
+@router.get("/export/csv")
+def export_csv(
+    from_date: str,
+    to_date: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    if not any(r.role.value == "FINANCE" for r in current_user.roles):
+        raise HTTPException(status_code=403, detail="Finance role required")
+    try:
+        from_dt = datetime.fromisoformat(from_date)
+        to_dt = datetime.fromisoformat(to_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+    reqs = (
+        db.query(DisbursementRequest)
+        .filter(
+            DisbursementRequest.status == RequestStatus.APPROVED,
+            DisbursementRequest.submitted_at >= from_dt,
+            DisbursementRequest.submitted_at <= to_dt,
+        )
+        .all()
+    )
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(
+        ["Request ID", "Requester Name", "Title", "Total Amount (THB)", "Submission Date", "Approval Date"]
+    )
+    for req in reqs:
+        approval_event = next(
+            (
+                e
+                for e in reversed(req.events)
+                if e.event_type.value in ("MANAGER_APPROVED", "FINANCE_APPROVED")
+            ),
+            None,
+        )
+        writer.writerow(
+            [
+                req.id,
+                req.requester.name if req.requester else "",
+                req.title,
+                str(req.total_amount),
+                req.submitted_at.isoformat() if req.submitted_at else "",
+                approval_event.created_at.isoformat() if approval_event else "",
+            ]
+        )
+    output.seek(0)
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=requests.csv"},
+    )
 
 
 @router.get("/{request_id}", response_model=RequestOut)
-def get_request(request_id: str, db: Session = Depends(get_db)):
+def get_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     return _get_request_or_404(request_id, db)
 
 
 @router.patch("/{request_id}", response_model=RequestOut)
-def update_request(request_id: str, body: RequestUpdate, db: Session = Depends(get_db)):
+def update_request(
+    request_id: str,
+    body: RequestUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = _get_request_or_404(request_id, db)
     _require_draft(req)
     if body.title is not None:
@@ -141,7 +230,11 @@ def update_request(request_id: str, body: RequestUpdate, db: Session = Depends(g
 # --- Workflow action endpoints ---
 
 @router.post("/{request_id}/submit", response_model=RequestOut)
-def submit_request(request_id: str, db: Session = Depends(get_db)):
+def submit_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = _get_request_or_404(request_id, db)
 
     if req.status != RequestStatus.DRAFT:
@@ -162,24 +255,36 @@ def submit_request(request_id: str, db: Session = Depends(get_db)):
     if requester and requester.manager_id and requester.manager_id == req.requester_id:
         req.status = RequestStatus.PENDING_FINANCE_APPROVAL
         for fid in _finance_user_ids(db):
-            _notify(db, fid, req.id,
-                    f"Request '{req.title}' has been submitted and requires Finance approval (self-approval escalation).")
+            _notify(
+                db,
+                fid,
+                req.id,
+                f"Request '{req.title}' has been submitted and requires Finance approval (self-approval escalation).",
+            )
     else:
         req.status = RequestStatus.PENDING_MANAGER_APPROVAL
         if requester and requester.manager_id:
-            _notify(db, requester.manager_id, req.id,
-                    f"Request '{req.title}' has been submitted and is awaiting your approval.")
+            _notify(
+                db,
+                requester.manager_id,
+                req.id,
+                f"Request '{req.title}' has been submitted and is awaiting your approval.",
+            )
 
     req.submitted_at = datetime.now(timezone.utc)
     req.updated_at = datetime.now(timezone.utc)
-    _create_event(db, req.id, EventType.SUBMITTED)
+    _create_event(db, req.id, current_user.id, EventType.SUBMITTED)
     db.commit()
     db.refresh(req)
     return req
 
 
 @router.post("/{request_id}/cancel", response_model=RequestOut)
-def cancel_request(request_id: str, db: Session = Depends(get_db)):
+def cancel_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = _get_request_or_404(request_id, db)
 
     cancellable = {
@@ -195,7 +300,7 @@ def cancel_request(request_id: str, db: Session = Depends(get_db)):
 
     req.status = RequestStatus.CANCELLED
     req.updated_at = datetime.now(timezone.utc)
-    _create_event(db, req.id, EventType.CANCELLED)
+    _create_event(db, req.id, current_user.id, EventType.CANCELLED)
     _notify(db, req.requester_id, req.id, f"Your request '{req.title}' has been cancelled.")
     db.commit()
     db.refresh(req)
@@ -203,30 +308,61 @@ def cancel_request(request_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{request_id}/approve", response_model=RequestOut)
-def approve_request(request_id: str, db: Session = Depends(get_db)):
+def approve_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = _get_request_or_404(request_id, db)
+    roles = [r.role.value for r in current_user.roles]
 
     if req.status == RequestStatus.PENDING_MANAGER_APPROVAL:
+        if "MANAGER" not in roles and "ADMIN" not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Manager role required to approve at this stage",
+            )
         threshold = _get_threshold(db)
         if req.total_amount <= threshold:
             req.status = RequestStatus.APPROVED
-            _create_event(db, req.id, EventType.MANAGER_APPROVED)
-            _notify(db, req.requester_id, req.id,
-                    f"Your request '{req.title}' has been approved by your manager.")
+            _create_event(db, req.id, current_user.id, EventType.MANAGER_APPROVED)
+            _notify(
+                db,
+                req.requester_id,
+                req.id,
+                f"Your request '{req.title}' has been approved by your manager.",
+            )
         else:
             req.status = RequestStatus.PENDING_FINANCE_APPROVAL
-            _create_event(db, req.id, EventType.MANAGER_APPROVED)
-            _notify(db, req.requester_id, req.id,
-                    f"Your request '{req.title}' has been approved by your manager and escalated to Finance (amount: {req.total_amount} THB).")
+            _create_event(db, req.id, current_user.id, EventType.MANAGER_APPROVED)
+            _notify(
+                db,
+                req.requester_id,
+                req.id,
+                f"Your request '{req.title}' has been approved by your manager and escalated to Finance (amount: {req.total_amount} THB).",
+            )
             for fid in _finance_user_ids(db):
-                _notify(db, fid, req.id,
-                        f"Request '{req.title}' requires Finance approval (amount: {req.total_amount} THB).")
+                _notify(
+                    db,
+                    fid,
+                    req.id,
+                    f"Request '{req.title}' requires Finance approval (amount: {req.total_amount} THB).",
+                )
 
     elif req.status == RequestStatus.PENDING_FINANCE_APPROVAL:
+        if "FINANCE" not in roles and "ADMIN" not in roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Finance role required to approve at this stage",
+            )
         req.status = RequestStatus.APPROVED
-        _create_event(db, req.id, EventType.FINANCE_APPROVED)
-        _notify(db, req.requester_id, req.id,
-                f"Your request '{req.title}' has been approved by Finance.")
+        _create_event(db, req.id, current_user.id, EventType.FINANCE_APPROVED)
+        _notify(
+            db,
+            req.requester_id,
+            req.id,
+            f"Your request '{req.title}' has been approved by Finance.",
+        )
 
     else:
         raise HTTPException(
@@ -241,7 +377,12 @@ def approve_request(request_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{request_id}/reject", response_model=RequestOut)
-def reject_request(request_id: str, body: RejectBody, db: Session = Depends(get_db)):
+def reject_request(
+    request_id: str,
+    body: RejectBody,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = _get_request_or_404(request_id, db)
 
     rejectable = {
@@ -256,16 +397,31 @@ def reject_request(request_id: str, body: RejectBody, db: Session = Depends(get_
 
     req.status = RequestStatus.REJECTED
     req.updated_at = datetime.now(timezone.utc)
-    _create_event(db, req.id, EventType.REJECTED, comment=body.comment)
-    _notify(db, req.requester_id, req.id,
-            f"Your request '{req.title}' has been rejected. Reason: {body.comment}")
+    _create_event(db, req.id, current_user.id, EventType.REJECTED, comment=body.comment)
+    _notify(
+        db,
+        req.requester_id,
+        req.id,
+        f"Your request '{req.title}' has been rejected. Reason: {body.comment}",
+    )
     db.commit()
     db.refresh(req)
     return req
 
 
 @router.post("/{request_id}/pay", response_model=RequestOut)
-def pay_request(request_id: str, db: Session = Depends(get_db)):
+def pay_request(
+    request_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    roles = [r.role.value for r in current_user.roles]
+    if "FINANCE" not in roles and "ADMIN" not in roles:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Finance role required to mark a request as paid",
+        )
+
     req = _get_request_or_404(request_id, db)
 
     if req.status != RequestStatus.APPROVED:
@@ -276,9 +432,13 @@ def pay_request(request_id: str, db: Session = Depends(get_db)):
 
     req.status = RequestStatus.PAID
     req.updated_at = datetime.now(timezone.utc)
-    _create_event(db, req.id, EventType.PAID)
-    _notify(db, req.requester_id, req.id,
-            f"Your request '{req.title}' has been marked as paid.")
+    _create_event(db, req.id, current_user.id, EventType.PAID)
+    _notify(
+        db,
+        req.requester_id,
+        req.id,
+        f"Your request '{req.title}' has been marked as paid.",
+    )
     db.commit()
     db.refresh(req)
     return req
@@ -286,8 +446,17 @@ def pay_request(request_id: str, db: Session = Depends(get_db)):
 
 # --- Line item endpoints ---
 
-@router.post("/{request_id}/line-items", response_model=LineItemOut, status_code=status.HTTP_201_CREATED)
-def add_line_item(request_id: str, body: LineItemCreate, db: Session = Depends(get_db)):
+@router.post(
+    "/{request_id}/line-items",
+    response_model=LineItemOut,
+    status_code=status.HTTP_201_CREATED,
+)
+def add_line_item(
+    request_id: str,
+    body: LineItemCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = _get_request_or_404(request_id, db)
     _require_draft(req)
     subtotal = body.quantity * body.unit_price
@@ -309,7 +478,13 @@ def add_line_item(request_id: str, body: LineItemCreate, db: Session = Depends(g
 
 
 @router.patch("/{request_id}/line-items/{item_id}", response_model=LineItemOut)
-def update_line_item(request_id: str, item_id: str, body: LineItemUpdate, db: Session = Depends(get_db)):
+def update_line_item(
+    request_id: str,
+    item_id: str,
+    body: LineItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = _get_request_or_404(request_id, db)
     _require_draft(req)
     item = db.get(LineItem, item_id)
@@ -333,7 +508,12 @@ def update_line_item(request_id: str, item_id: str, body: LineItemUpdate, db: Se
 
 
 @router.delete("/{request_id}/line-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_line_item(request_id: str, item_id: str, db: Session = Depends(get_db)):
+def delete_line_item(
+    request_id: str,
+    item_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     req = _get_request_or_404(request_id, db)
     _require_draft(req)
     item = db.get(LineItem, item_id)

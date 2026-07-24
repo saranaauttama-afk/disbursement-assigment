@@ -106,3 +106,49 @@ class NotificationOut(BaseModel):
     message: str
     is_read: bool
     created_at: datetime
+
+
+# --- Auth ---
+
+class LoginBody(BaseModel):
+    email: str
+    password: str
+
+
+class UserOut(BaseModel):
+    id: str
+    name: str
+    email: str
+    roles: list[str] = []
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
+class UserCreate(BaseModel):
+    name: str
+    email: str
+    password: str
+    roles: list[str] = []
+    manager_id: str | None = None
+
+
+class UserUpdate(BaseModel):
+    roles: list[str] | None = None
+    manager_id: str | None = None
+
+
+# --- Config ---
+
+class ConfigOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    value: str
+
+
+class ConfigUpdate(BaseModel):
+    value: str
